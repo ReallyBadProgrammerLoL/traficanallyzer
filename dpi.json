@@ -1,0 +1,58 @@
+{
+  "enabled": true,
+  "long_label": 40,
+  "base64_enabled": true,
+  "tokens": [
+    "powershell",
+    "cmd.exe",
+    "/bin/sh",
+    "/bin/bash",
+    "bash -i",
+    "invoke-",
+    "iex(",
+    "iex",
+    "-enc",
+    "-encodedcommand",
+    "frombase64",
+    "certutil",
+    "bitsadmin",
+    "mshta",
+    "rundll32",
+    "wget",
+    "curl",
+    "nc -",
+    "ncat",
+    "whoami",
+    "net user",
+    "$(",
+    "`",
+    "&&",
+    ";id"
+  ],
+  "patterns": [
+    {
+      "regex": "(?i)union\\s+select",
+      "target": "payload",
+      "msg": "SQL injection (UNION SELECT)",
+      "sid": 3100
+    },
+    {
+      "regex": "\\.\\./\\.\\./",
+      "target": "payload",
+      "msg": "directory traversal (../../)",
+      "sid": 3101
+    },
+    {
+      "regex": "/etc/(passwd|shadow)",
+      "target": "payload",
+      "msg": "sensitive file access (/etc/passwd)",
+      "sid": 3102
+    },
+    {
+      "regex": "(?i)\\b[0-9a-f]{32,}\\b",
+      "target": "qname",
+      "msg": "long hex subdomain (DNS tunneling)",
+      "sid": 3103
+    }
+  ]
+}

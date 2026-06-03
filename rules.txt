@@ -1,0 +1,34 @@
+# NIDS Rules — Snort-compatible syntax
+# Format: action proto src_ip src_port direction dst_ip dst_port (options)
+#
+# NOTE: port scans and host sweeps are detected statefully in analyzer.py
+# (one alert per scan), so there are deliberately no per-SYN / per-ping rules
+# here — those only create noise.  These rules match content signatures and
+# access to sensitive services.
+pass tcp any any -> any 8080 (msg:"allow http request"; sid:8000;)
+pass tcp any 8080 -> any any (msg:"allow http response"; sid:8001;)
+
+# --- Content signatures ---------------------------------------------------
+alert tcp any any -> any 445 (msg:"SMB Null Session"; content:"|00 00 00 00|"; sid:1003;)
+alert tcp any any -> any 389 (msg:"LDAP Enumeration"; content:"LDAP"; sid:1004;)
+alert tcp any any -> any 88  (msg:"Kerberos AS-REQ"; content:"|6a 82|"; sid:1009;)
+
+# DNS qnames are length-prefixed labels on the wire (\x04evil), so match the
+# bare label "evil" rather than ".evil".
+alert udp any any -> any 53 (msg:"DNS Query - Suspicious Name"; content:"evil"; sid:1006;)
+alert udp any any -> any 53 (msg:"DNS Exfiltration Pattern"; content:"data."; sid:1007;)
+
+# --- Sensitive service access (informational) -----------------------------
+alert tcp any any -> any 636  (msg:"LDAPS Connection"; sid:1005;)
+alert tcp any any -> any 135  (msg:"RPC Endpoint Mapper"; sid:1010;)
+alert tcp any any -> any 5985 (msg:"WinRM HTTP Access"; sid:1011;)
+alert tcp any any -> any 5986 (msg:"WinRM HTTPS Access"; sid:1012;)
+
+# --- Blocking rules (drop) ------------------------------------------------
+# These take effect only when PROTECT mode is enabled from the dashboard.
+# In MONITOR mode they surface as "would-block" so you can see what *would*
+# be dropped without touching traffic. Demo with:
+#   python simulate.py connect --port 445   (refused -> TIMEOUT once enabled)
+#   python simulate.py dns-evil             (DNS "evil" query gets dropped)
+drop tcp any any -> any 445 (msg:"BLOCK SMB"; sid:9001;)
+drop udp any any -> any 53 (msg:"BLOCK DNS Evil"; content:"evil"; sid:9002;)

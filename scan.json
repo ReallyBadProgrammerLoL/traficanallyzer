@@ -1,0 +1,9 @@
+{
+  "window": 5.0,
+  "port_scan_threshold": 10,
+  "sweep_threshold": 10,
+  "flood_threshold": 20,
+  "cooldown": 15.0,
+  "block": true,
+  "block_duration": 30.0
+}

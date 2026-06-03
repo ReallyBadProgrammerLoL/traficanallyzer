@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NIDS/IPS Console</title>
+  <style>
+    :root {
+      --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#c9d1d9;
+      --muted:#8b949e; --accent:#58a6ff; --red:#f85149; --orange:#db6d28;
+      --yellow:#d29922; --green:#3fb950;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg);
+      font-family:"JetBrains Mono","Fira Code",ui-monospace,monospace; font-size:14px; }
+    header { display:flex; align-items:center; gap:14px; padding:12px 20px;
+      border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap; }
+    header h1 { font-size:15px; margin:0; letter-spacing:1px; }
+    .mode { padding:2px 10px; border-radius:4px; font-size:11px; font-weight:700;
+      text-transform:uppercase; }
+    .mode.idle { background:rgba(139,148,158,.18); color:var(--muted); }
+    .mode.monitor { background:rgba(88,166,255,.15); color:var(--accent); }
+    .mode.protect { background:rgba(248,81,73,.18); color:var(--red); }
+    .stats { margin-left:auto; display:flex; gap:18px; }
+    .stat { text-align:right; } .stat .num { font-size:18px; font-weight:700; }
+    .stat .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; }
+    .num.blocked{color:var(--red);} .num.alerted{color:var(--yellow);}
+    .num.passed{color:var(--green);}
+    .toggle { display:flex; align-items:center; gap:8px; }
+    button { background:#21262d; color:var(--fg); border:1px solid var(--border);
+      border-radius:6px; padding:6px 12px; cursor:pointer; font-family:inherit; font-size:13px; }
+    button:hover { border-color:var(--accent); }
+    button.danger { border-color:var(--red); color:var(--red); }
+    button.primary { background:var(--accent); color:#0d1117; border-color:var(--accent); font-weight:700; }
+    nav.tabs { display:flex; gap:4px; padding:8px 20px 0; background:var(--panel);
+      border-bottom:1px solid var(--border); }
+    nav.tabs button { border-bottom:none; border-radius:6px 6px 0 0; }
+    nav.tabs button.active { background:var(--bg); border-color:var(--border); color:var(--accent); }
+    .view { display:none; padding:0; } .view.active { display:block; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { position:sticky; top:0; background:var(--panel); text-align:left;
+      padding:9px 14px; font-size:11px; text-transform:uppercase; color:var(--muted);
+      border-bottom:1px solid var(--border); }
+    tbody td { padding:7px 14px; border-bottom:1px solid #21262d; white-space:nowrap; }
+    tbody tr:first-child { animation:flash .6s ease-out; }
+    @keyframes flash { from{background:rgba(248,81,73,.22);} to{background:transparent;} }
+    .tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; text-transform:uppercase; }
+    .v-blocked{background:rgba(248,81,73,.18);color:var(--red);}
+    .v-default-deny{background:rgba(248,81,73,.18);color:var(--red);}
+    .v-would-block{background:rgba(219,109,40,.18);color:var(--orange);}
+    .v-alerted{background:rgba(210,153,34,.16);color:var(--yellow);}
+    .v-passed{background:rgba(63,185,80,.16);color:var(--green);}
+    .proto{color:var(--muted);} .msg{font-weight:600;} .sid,.info{color:var(--muted);font-size:12px;}
+    tbody tr.clickable{cursor:pointer;} tbody tr.clickable:hover{background:#1b2230;}
+    tr.detail td{background:#0b0f14;padding:0;border-bottom:1px solid var(--border);}
+    .detail-box{padding:12px 16px;}
+    .interp{color:var(--accent);margin-bottom:10px;word-break:break-all;}
+    .detail-grid{display:grid;grid-template-columns:max-content 1fr;gap:3px 18px;margin-bottom:12px;font-size:12px;}
+    .detail-grid .k{color:var(--muted);text-transform:uppercase;}
+    pre.hex{white-space:pre;overflow-x:auto;margin:0;font-size:12px;color:var(--fg);
+      background:#06090d;border:1px solid var(--border);border-radius:6px;padding:10px;}
+    .panel-pad { padding:20px; max-width:1000px; }
+    textarea { width:100%; height:55vh; background:#0b0f14; color:var(--fg);
+      border:1px solid var(--border); border-radius:6px; padding:12px;
+      font-family:inherit; font-size:13px; resize:vertical; }
+    .row { display:flex; gap:12px; align-items:center; margin:10px 0; flex-wrap:wrap; }
+    label { color:var(--muted); font-size:12px; }
+    select, input[type=text], input[type=number] { background:#0b0f14; color:var(--fg);
+      border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-family:inherit; }
+    h3.dpi-h { margin:22px 0 4px; font-size:13px; color:var(--fg); }
+    .dpi-row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+    .dpi-row input.tok { min-width:280px; }
+    .dpi-row input.rx { min-width:240px; flex:1; }
+    .dpi-row input.msg { min-width:200px; flex:1; }
+    .dpi-row input.sid { width:90px; }
+    .dpi-x { background:#30363d; border:none; color:var(--fg); border-radius:6px;
+      width:28px; height:28px; cursor:pointer; line-height:1; }
+    .dpi-x:hover { background:var(--red); }
+    .errors { color:var(--red); white-space:pre-wrap; margin-top:10px; font-size:12px; }
+    .ok { color:var(--green); margin-top:10px; font-size:12px; }
+    .hint { color:var(--muted); font-size:12px; margin:6px 0 16px; }
+    .empty { padding:40px; text-align:center; color:var(--muted); }
+    .switch { position:relative; width:46px; height:24px; }
+    .switch input { display:none; }
+    .slider { position:absolute; inset:0; background:#30363d; border-radius:24px; transition:.2s; }
+    .slider:before { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px;
+      background:#fff; border-radius:50%; transition:.2s; }
+    .switch input:checked + .slider { background:var(--red); }
+    .switch.mon input:checked + .slider { background:var(--accent); }
+    .switch input:checked + .slider:before { transform:translateX(22px); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NIDS/IPS</h1>
+    <span id="mode" class="mode idle">idle</span>
+    <span id="scope" class="proto"></span>
+    <div class="toggle">
+      <label class="switch mon"><input type="checkbox" id="monitor"><span class="slider"></span></label>
+      <label for="monitor">Monitor</label>
+    </div>
+    <div class="toggle">
+      <label class="switch"><input type="checkbox" id="protect"><span class="slider"></span></label>
+      <label for="protect">Protection</label>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="num blocked" id="c-blocked">0</div><div class="lbl">Blocked</div></div>
+      <div class="stat"><div class="num blocked" id="c-denied">0</div><div class="lbl">Denied</div></div>
+      <div class="stat"><div class="num alerted" id="c-alerted">0</div><div class="lbl">Alerted</div></div>
+      <div class="stat"><div class="num passed" id="c-passed">0</div><div class="lbl">Passed</div></div>
+      <div class="stat"><div class="num" id="c-packets">0</div><div class="lbl">Packets</div></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="alerts" class="active">Alerts</button>
+    <button data-tab="traffic">Traffic</button>
+    <button data-tab="rules">Rules</button>
+    <button data-tab="dpi">DPI</button>
+    <button data-tab="scan">Scan</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
+  <section id="alerts" class="view active">
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Verdict</th><th>Action</th><th>Proto</th>
+        <th>Source</th><th>Destination</th><th>Signature</th><th>SID</th><th>Info</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">Ожидание трафика…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="traffic" class="view">
+    <div class="row" style="padding:10px 14px 0;">
+      <label>Фильтр</label>
+      <select id="traffic-filter">
+        <option value="">все вердикты</option>
+        <option value="passed">passed</option>
+        <option value="alerted">alerted</option>
+        <option value="blocked">blocked</option>
+        <option value="default-deny">default-deny</option>
+        <option value="would-block">would-block</option>
+      </select>
+      <label><input type="checkbox" id="traffic-pause"> пауза</label>
+      <button id="traffic-clear">Очистить</button>
+      <span class="proto" id="traffic-count">0 пакетов</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Verdict</th><th>Proto</th><th>Flags</th>
+        <th>Source</th><th>Destination</th><th>Len</th><th>Info</th>
+      </tr></thead>
+      <tbody id="traffic-rows"><tr><td colspan="8" class="empty">Ожидание трафика…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="rules" class="view">
+    <div class="panel-pad">
+      <div class="hint">Snort-синтаксис. Действия: <b>drop</b> (блок), <b>alert</b> (пропустить+сигнал), <b>pass</b> (whitelist). Сохранение перезагружает движок.</div>
+      <textarea id="rules-text" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="primary" id="save-rules">Save &amp; reload</button>
+        <button id="reload-rules">Reload from disk</button>
+        <span id="rules-status"></span>
+      </div>
+      <div class="errors" id="rules-errors"></div>
+    </div>
+  </section>
+
+  <section id="dpi" class="view">
+    <div class="panel-pad">
+      <div class="hint">Глубокий анализ DNS. Эвристики + свои regex по qname / TXT / payload.
+        Срабатывание роняет пакет (<b>drop</b>, при включённой Protection). Save перезагружает инспектор.</div>
+
+      <div class="row">
+        <label><input type="checkbox" id="dpi-enabled"> DPI включён</label>
+      </div>
+      <div class="row">
+        <label>Порог длины метки (байт)</label>
+        <input type="number" id="dpi-longlabel" min="1" style="width:90px;">
+        <label style="margin-left:18px;"><input type="checkbox" id="dpi-base64"> детект base64-блобов</label>
+      </div>
+
+      <h3 class="dpi-h">Командные токены</h3>
+      <div class="hint">Подстрока в payload (регистронезависимо) → причина срабатывания встроенной находки (sid 3001).</div>
+      <div id="dpi-tokens"></div>
+      <button id="dpi-add-token">+ токен</button>
+
+      <h3 class="dpi-h">Regex-правила</h3>
+      <div class="hint">Своя регулярка с собственным msg и sid. Цель: qname (имя), txt (TXT-записи) или payload (сырой).</div>
+      <div id="dpi-patterns"></div>
+      <button id="dpi-add-pattern">+ правило</button>
+
+      <div class="row" style="margin-top:16px;">
+        <button class="primary" id="dpi-save">Save &amp; reload</button>
+        <button id="dpi-reload">Reload from disk</button>
+        <span id="dpi-status"></span>
+      </div>
+      <div class="errors" id="dpi-errors"></div>
+    </div>
+  </section>
+
+  <section id="scan" class="view">
+    <div class="panel-pad">
+      <div class="hint">Stateful-детект сканов и correlation-автоблок. Источник, пересёкший
+        порог, уходит в карантин — и весь его трафик роняется (<b>drop</b>, sid 2003) на время блокировки.
+        Как и любой drop, действует только при включённой Protection (иначе would-block).</div>
+
+      <div class="row">
+        <label style="min-width:340px;">Окно наблюдения (сек)</label>
+        <input type="number" id="scan-window" min="0" step="0.5" style="width:90px;">
+      </div>
+      <div class="row">
+        <label style="min-width:340px;">Порог вертикального скана (портов на хост)</label>
+        <input type="number" id="scan-port" min="1" style="width:90px;">
+      </div>
+      <div class="row">
+        <label style="min-width:340px;">Порог свипа (хостов)</label>
+        <input type="number" id="scan-sweep" min="1" style="width:90px;">
+      </div>
+      <div class="row">
+        <label style="min-width:340px;">Порог флуда (всего пустых SYN)</label>
+        <input type="number" id="scan-flood" min="1" style="width:90px;">
+      </div>
+      <div class="row">
+        <label style="min-width:340px;">Cooldown между повторными алертами (сек)</label>
+        <input type="number" id="scan-cooldown" min="0" step="0.5" style="width:90px;">
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="scan-block"> Автоблок (карантин нарушителя)</label>
+      </div>
+      <div class="row">
+        <label style="min-width:340px;">Длительность карантина (сек)</label>
+        <input type="number" id="scan-duration" min="0" step="1" style="width:90px;">
+      </div>
+
+      <div class="row" style="margin-top:16px;">
+        <button class="primary" id="scan-save">Save &amp; apply</button>
+        <button id="scan-reload">Reload from disk</button>
+        <span id="scan-status"></span>
+      </div>
+      <div class="errors" id="scan-errors"></div>
+    </div>
+  </section>
+
+  <section id="settings" class="view">
+    <div class="panel-pad">
+      <div class="hint">Выбор интерфейса и подсети для анализа. Блокировка работает только при включённой Protection.</div>
+      <div class="row">
+        <label>Interface</label>
+        <select id="iface"></select>
+      </div>
+      <div class="row">
+        <label>HOME_NET (CIDR, через запятую — пусто = весь трафик)</label>
+        <input type="text" id="home-net" placeholder="127.0.0.0/8, 10.0.0.0/24" style="min-width:320px;">
+      </div>
+      <div class="row">
+        <label>Политика для неизвестного трафика</label>
+        <select id="policy">
+          <option value="allow">allow — пропускать (режим Snort/IDS)</option>
+          <option value="deny">deny — блокировать (режим firewall/allowlist)</option>
+        </select>
+      </div>
+      <div class="hint" id="policy-hint"></div>
+      <div class="row">
+        <button class="primary" id="apply-scope">Apply scope</button>
+        <span id="scope-status"></span>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // --- tabs ---
+    document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+      document.querySelectorAll("nav.tabs button").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      b.classList.add("active");
+      document.getElementById(b.dataset.tab).classList.add("active");
+    });
+
+    function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+    function ep(ip,p){return p?`${ip}:${p}`:ip;}
+    function fmt(iso){try{return new Date(iso).toLocaleTimeString("ru-RU");}catch{return iso;}}
+
+    // --- click-to-expand packet internals ---
+    function detailRow(rec,cols){
+      const v=rec.verdict||"";
+      const grid=
+        `<div class="k">Verdict</div><div><span class="tag v-${v}">${v||"—"}</span></div>`+
+        `<div class="k">Action</div><div>${esc(rec.action||"—")}</div>`+
+        `<div class="k">Proto</div><div>${esc((rec.proto||"").toUpperCase()||"—")}</div>`+
+        `<div class="k">Flags</div><div>${esc(rec.flags||"—")}</div>`+
+        `<div class="k">Source</div><div>${esc(ep(rec.src_ip,rec.src_port))}</div>`+
+        `<div class="k">Dest</div><div>${esc(ep(rec.dst_ip,rec.dst_port))}</div>`+
+        `<div class="k">Length</div><div>${rec.len||0} B</div>`+
+        (rec.sid!=null?`<div class="k">SID</div><div>${rec.sid}</div>`:``)+
+        (rec.msg?`<div class="k">Rule</div><div>${esc(rec.msg)}</div>`:``);
+      const hex=rec.hexdump?`<pre class="hex">${esc(rec.hexdump)}</pre>`:`<div class="interp">payload пуст</div>`;
+      const tr=document.createElement("tr");
+      tr.className="detail";
+      tr.innerHTML=`<td colspan="${cols}"><div class="detail-box">`+
+        `<div class="interp">${esc(rec.interp||"(нет интерпретации)")}</div>`+
+        `<div class="detail-grid">${grid}</div>${hex}</div></td>`;
+      return tr;
+    }
+    function attachDetail(tr,rec,cols){
+      tr.classList.add("clickable");
+      tr.onclick=()=>{
+        const nx=tr.nextSibling;
+        if(nx && nx.classList && nx.classList.contains("detail")){nx.remove();return;}
+        tr.parentNode.insertBefore(detailRow(rec,cols),tr.nextSibling);
+      };
+    }
+
+    // --- alerts stream ---
+    const rows = document.getElementById("rows");
+    let cleared = false;
+    function addRow(a){
+      if(!cleared){rows.innerHTML="";cleared=true;}
+      const v=(a.verdict||"alerted");
+      const tr=document.createElement("tr");
+      tr.innerHTML =
+        `<td>${fmt(a.timestamp)}</td>`+
+        `<td><span class="tag v-${v}">${v}</span></td>`+
+        `<td>${esc(a.action||"")}</td>`+
+        `<td class="proto">${esc((a.proto||"").toUpperCase())}</td>`+
+        `<td>${ep(a.src_ip,a.src_port)}</td>`+
+        `<td>${ep(a.dst_ip,a.dst_port)}</td>`+
+        `<td class="msg">${esc(a.msg)}</td>`+
+        `<td class="sid">${a.sid}</td>`+
+        `<td class="info">${esc(a.info||"")}</td>`;
+      attachDetail(tr,a,9);
+      rows.insertBefore(tr,rows.firstChild);
+      while(rows.children.length>250) rows.removeChild(rows.lastChild);
+    }
+    const es=new EventSource("/stream");
+    es.onmessage=e=>{try{addRow(JSON.parse(e.data));}catch{}};
+
+    // --- traffic feed (every packet) ---
+    const trows=document.getElementById("traffic-rows");
+    let tcleared=false, tcount=0;
+    const tfilter=document.getElementById("traffic-filter");
+    const tpause=document.getElementById("traffic-pause");
+    document.getElementById("traffic-clear").onclick=()=>{
+      trows.innerHTML='<tr><td colspan="8" class="empty">Очищено…</td></tr>';
+      tcleared=false; tcount=0; document.getElementById("traffic-count").textContent="0 пакетов";
+    };
+    function addTraffic(p){
+      tcount++; document.getElementById("traffic-count").textContent=tcount+" пакетов";
+      if(tpause.checked) return;
+      if(!tcleared){trows.innerHTML="";tcleared=true;}
+      const v=(p.verdict||"passed");
+      const tr=document.createElement("tr");
+      tr.dataset.verdict=v;
+      const f=tfilter.value; if(f && v!==f) tr.style.display="none";
+      tr.innerHTML=
+        `<td>${fmt(p.timestamp)}</td>`+
+        `<td><span class="tag v-${v}">${v}</span></td>`+
+        `<td class="proto">${esc((p.proto||"").toUpperCase())}</td>`+
+        `<td class="proto">${esc(p.flags||"")}</td>`+
+        `<td>${ep(p.src_ip,p.src_port)}</td>`+
+        `<td>${ep(p.dst_ip,p.dst_port)}</td>`+
+        `<td class="sid">${p.len||0}</td>`+
+        `<td class="info">${esc(p.info||"")}</td>`;
+      attachDetail(tr,p,8);
+      trows.insertBefore(tr,trows.firstChild);
+      while(trows.children.length>300) trows.removeChild(trows.lastChild);
+    }
+    // Re-apply the filter to already-rendered rows when the dropdown changes.
+    tfilter.onchange=()=>{
+      const f=tfilter.value;
+      for(const tr of trows.children){
+        if(tr.classList.contains("detail")){          // detail mirrors its parent
+          const prev=tr.previousElementSibling;
+          tr.style.display=(prev && prev.style.display==="none")?"none":"";
+          continue;
+        }
+        if(tr.dataset.verdict===undefined) continue;   // placeholder row
+        tr.style.display=(f && tr.dataset.verdict!==f)?"none":"";
+      }
+    };
+    const ets=new EventSource("/traffic");
+    ets.onmessage=e=>{try{addTraffic(JSON.parse(e.data));}catch{}};
+
+    // --- status polling ---
+    let ifacesLoaded=false;
+    async function refresh(){
+      const s=await (await fetch("/api/status")).json();
+      document.getElementById("mode").className="mode "+s.mode;
+      document.getElementById("mode").textContent=s.mode;
+      document.getElementById("scope").textContent=`iface:${s.iface}  rules:${s.rules}  policy:${s.default_policy}`;
+      document.getElementById("protect").checked=s.protection;
+      document.getElementById("monitor").checked=(s.mode==="monitor");
+      const c=s.counters;
+      document.getElementById("c-blocked").textContent=c.blocked;
+      document.getElementById("c-denied").textContent=c.denied;
+      document.getElementById("c-alerted").textContent=c.alerted;
+      document.getElementById("c-passed").textContent=c.passed;
+      document.getElementById("c-packets").textContent=c.packets;
+      if(!ifacesLoaded){
+        const sel=document.getElementById("iface");
+        sel.innerHTML=s.interfaces.map(i=>`<option ${i===s.iface?"selected":""}>${i}</option>`).join("");
+        document.getElementById("home-net").value=(s.home_net||[]).join(", ");
+        document.getElementById("policy").value=s.default_policy;
+        updatePolicyHint();
+        ifacesLoaded=true;
+      }
+    }
+    function updatePolicyHint(){
+      const deny=document.getElementById("policy").value==="deny";
+      const h=document.getElementById("policy-hint");
+      h.style.color=deny?"var(--red)":"var(--muted)";
+      h.textContent=deny
+        ? "⚠ deny: блокируется ВСЁ, что не разрешено явным правилом pass. На реальном интерфейсе с включённой Protection это оборвёт сеть — используйте только в изолированной подсети (lo / veth)."
+        : "allow: трафик без совпадений пропускается, действуют только сигнатуры (поведение Snort/Suricata).";
+    }
+    document.getElementById("policy").onchange=updatePolicyHint;
+    setInterval(refresh,2000); refresh();
+
+    // --- monitor toggle ---
+    document.getElementById("monitor").onchange=async e=>{
+      await fetch("/api/monitor",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({enabled:e.target.checked})});
+      refresh();
+    };
+
+    // --- protection toggle ---
+    document.getElementById("protect").onchange=async e=>{
+      const r=await fetch("/api/protection",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({enabled:e.target.checked})});
+      if(!r.ok){const j=await r.json();alert("Ошибка: "+(j.error||r.status));e.target.checked=false;}
+      refresh();
+    };
+
+    // --- rules editor ---
+    async function loadRules(){
+      const j=await (await fetch("/api/rules")).json();
+      document.getElementById("rules-text").value=j.text;
+    }
+    loadRules();
+    document.getElementById("save-rules").onclick=async()=>{
+      const text=document.getElementById("rules-text").value;
+      const r=await fetch("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text})});
+      const j=await r.json();
+      const err=document.getElementById("rules-errors"), st=document.getElementById("rules-status");
+      if(r.ok){err.textContent="";st.className="ok";st.textContent=`Saved — ${j.rules} rules loaded`;}
+      else{st.textContent="";err.textContent="Не сохранено. Ошибки:\n"+(j.errors||[]).join("\n");}
+      refresh();
+    };
+    document.getElementById("reload-rules").onclick=async()=>{
+      await fetch("/api/reload",{method:"POST"}); await loadRules();
+      document.getElementById("rules-status").className="ok";
+      document.getElementById("rules-status").textContent="Reloaded from disk";
+      refresh();
+    };
+
+    // --- DPI config ---
+    function addTokenRow(val=""){
+      const div=document.createElement("div"); div.className="dpi-row";
+      div.innerHTML=`<input class="tok" type="text" placeholder="powershell">`+
+        `<button class="dpi-x" title="удалить">×</button>`;
+      div.querySelector(".tok").value=val;
+      div.querySelector(".dpi-x").onclick=()=>div.remove();
+      document.getElementById("dpi-tokens").appendChild(div);
+    }
+    function addPatternRow(p={}){
+      const div=document.createElement("div"); div.className="dpi-row";
+      div.innerHTML=
+        `<input class="rx" type="text" placeholder="regex">`+
+        `<select class="tgt"><option value="qname">qname</option>`+
+        `<option value="txt">txt</option><option value="payload">payload</option></select>`+
+        `<input class="msg" type="text" placeholder="сообщение">`+
+        `<input class="sid" type="number" placeholder="sid">`+
+        `<button class="dpi-x" title="удалить">×</button>`;
+      div.querySelector(".rx").value=p.regex||"";
+      div.querySelector(".tgt").value=p.target||"qname";
+      div.querySelector(".msg").value=p.msg||"";
+      if(p.sid!=null) div.querySelector(".sid").value=p.sid;
+      div.querySelector(".dpi-x").onclick=()=>div.remove();
+      document.getElementById("dpi-patterns").appendChild(div);
+    }
+    function collectDPI(){
+      const tokens=[...document.querySelectorAll("#dpi-tokens input.tok")]
+        .map(i=>i.value.trim()).filter(Boolean);
+      const patterns=[...document.querySelectorAll("#dpi-patterns .dpi-row")].map(r=>({
+        regex:r.querySelector(".rx").value,
+        target:r.querySelector(".tgt").value,
+        msg:r.querySelector(".msg").value,
+        sid:parseInt(r.querySelector(".sid").value,10),
+      })).filter(p=>p.regex||p.msg);
+      return {
+        enabled:document.getElementById("dpi-enabled").checked,
+        long_label:parseInt(document.getElementById("dpi-longlabel").value,10),
+        base64_enabled:document.getElementById("dpi-base64").checked,
+        tokens, patterns,
+      };
+    }
+    async function loadDPI(){
+      const c=await (await fetch("/api/dpi")).json();
+      document.getElementById("dpi-enabled").checked=!!c.enabled;
+      document.getElementById("dpi-longlabel").value=c.long_label??40;
+      document.getElementById("dpi-base64").checked=!!c.base64_enabled;
+      const tc=document.getElementById("dpi-tokens"); tc.innerHTML="";
+      (c.tokens||[]).forEach(addTokenRow);
+      const pc=document.getElementById("dpi-patterns"); pc.innerHTML="";
+      (c.patterns||[]).forEach(addPatternRow);
+    }
+    loadDPI();
+    document.getElementById("dpi-add-token").onclick=()=>addTokenRow();
+    document.getElementById("dpi-add-pattern").onclick=()=>addPatternRow();
+    document.getElementById("dpi-save").onclick=async()=>{
+      const r=await fetch("/api/dpi",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(collectDPI())});
+      const j=await r.json();
+      const err=document.getElementById("dpi-errors"), st=document.getElementById("dpi-status");
+      if(r.ok){err.textContent="";st.className="ok";st.textContent="Сохранено и перезагружено";}
+      else{st.textContent="";err.textContent="Не сохранено. Ошибки:\n"+(j.errors||[]).join("\n");}
+    };
+    document.getElementById("dpi-reload").onclick=async()=>{
+      await loadDPI();
+      const st=document.getElementById("dpi-status");
+      st.className="ok"; st.textContent="Reloaded";
+      document.getElementById("dpi-errors").textContent="";
+    };
+
+    // --- scan / correlation thresholds ---
+    function collectScan(){
+      return {
+        window:parseFloat(document.getElementById("scan-window").value),
+        port_scan_threshold:parseInt(document.getElementById("scan-port").value,10),
+        sweep_threshold:parseInt(document.getElementById("scan-sweep").value,10),
+        flood_threshold:parseInt(document.getElementById("scan-flood").value,10),
+        cooldown:parseFloat(document.getElementById("scan-cooldown").value),
+        block:document.getElementById("scan-block").checked,
+        block_duration:parseFloat(document.getElementById("scan-duration").value),
+      };
+    }
+    async function loadScan(){
+      const c=await (await fetch("/api/scan")).json();
+      document.getElementById("scan-window").value=c.window??5;
+      document.getElementById("scan-port").value=c.port_scan_threshold??10;
+      document.getElementById("scan-sweep").value=c.sweep_threshold??10;
+      document.getElementById("scan-flood").value=c.flood_threshold??20;
+      document.getElementById("scan-cooldown").value=c.cooldown??15;
+      document.getElementById("scan-block").checked=!!c.block;
+      document.getElementById("scan-duration").value=c.block_duration??30;
+    }
+    loadScan();
+    document.getElementById("scan-save").onclick=async()=>{
+      const r=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(collectScan())});
+      const j=await r.json();
+      const err=document.getElementById("scan-errors"), st=document.getElementById("scan-status");
+      if(r.ok){err.textContent="";st.className="ok";st.textContent="Сохранено и применено";}
+      else{st.textContent="";err.textContent="Не сохранено. Ошибки:\n"+(j.errors||[]).join("\n");}
+    };
+    document.getElementById("scan-reload").onclick=async()=>{
+      await loadScan();
+      const st=document.getElementById("scan-status");
+      st.className="ok"; st.textContent="Reloaded";
+      document.getElementById("scan-errors").textContent="";
+    };
+
+    // --- scope ---
+    document.getElementById("apply-scope").onclick=async()=>{
+      const iface=document.getElementById("iface").value;
+      const home_net=document.getElementById("home-net").value;
+      const default_policy=document.getElementById("policy").value;
+      await fetch("/api/scope",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({iface,home_net,default_policy})});
+      const st=document.getElementById("scope-status");
+      st.className="ok"; st.textContent="Applied"; refresh();
+    };
+  </script>
+</body>
+</html>
